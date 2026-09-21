@@ -1,0 +1,10 @@
+{
+  "name": "ぽこあ・クラウド島マネージャー",
+  "short_name": "ぽこあマネージャー",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f1e8",
+  "theme_color": "#fffdf8",
+  "lang": "ja",
+  "icons": [{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
