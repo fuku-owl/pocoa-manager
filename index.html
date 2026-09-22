@@ -1,6 +1,11 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffdf8"><link rel="manifest" href="manifest.webmanifest">
-<title>ぽこあ・クラウド島マネージャー V5</title>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#fffdf8">
+<link rel="manifest" href="manifest.webmanifest">
+<title>ぽこあ・クラウド島マネージャー V6</title>
 <style>
 body{margin:0;background:#f5f1e8;color:#3b342d;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
 header{padding:18px 16px;background:#fffdf8;border-bottom:1px solid #ded5c8;position:sticky;top:0;z-index:2}
@@ -22,26 +27,43 @@ textarea{min-height:70px}.modal{display:none;position:fixed;inset:0;background:#
 .sheet{background:#fffdf8;width:100%;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px;box-sizing:border-box}
 .danger{color:#9b3d32;border-color:#d8aaa4}.muted{opacity:.65}
 .chip{display:inline-block;padding:3px 7px;border-radius:8px;background:#eee8de;font-size:11px;margin:2px}
-</style></head><body>
-<header><h1>🌿 ぽこあ・クラウド島マネージャー V5</h1><div class="small">ポケモンたちの街づくり管理帳</div></header>
+.statcard{margin:0}.statlabel{font-size:12px;color:#81766b}
+</style>
+</head>
+<body>
+<header><h1>🌿 ぽこあ・クラウド島マネージャー V6</h1><div class="small">ポケモンたちの街づくり管理帳</div></header>
 <main id="app"></main>
-<nav id="nav"></nav><div id="modal" class="modal"><div class="sheet" id="sheet"></div></div>
+<nav id="nav"></nav>
+<div id="modal" class="modal"><div class="sheet" id="sheet"></div></div>
+
 <script>
-const K="pocoa-demo-v2",OLD="pocoa-demo-v1";
+const K="pocoa-demo-v2", OLD="pocoa-demo-v1";
 let d=JSON.parse(localStorage.getItem(K)||"null")||JSON.parse(localStorage.getItem(OLD)||"null")||{buildings:[],pokemon:[],todos:[],areas:[],memos:[]};
 d.buildings=d.buildings||[]; d.areas=d.areas||[]; d.todos=d.todos||[]; d.memos=d.memos||[]; d.pokemon=d.pokemon||[];
+
+function normalizeStatus(v, home){
+  const s=String(v||"").trim();
+  if(["未出現","仮住まい","入居"].includes(s)) return s;
+  if(s==="配置済み") return home ? "入居" : "仮住まい";
+  if(s==="住居未定") return "未出現";
+  if(s==="登場予定" || s==="未登場") return "未出現";
+  return home ? "入居" : "未出現";
+}
+d.pokemon=d.pokemon.map((p,i)=>({...p,no:p.no||i+1,status:normalizeStatus(p.status,p.home)}));
+d.buildings=d.buildings.map(b=>({...b,pokes:Array.isArray(b.pokes)?b.pokes:(b.poke?String(b.poke).split(/[、,，\n]/).map(x=>x.trim()).filter(Boolean):[])}));
 d.areas=[...new Set([...d.areas,...d.buildings.map(x=>x.area).filter(Boolean)])];
-d.pokemon=d.pokemon.map((p,i)=>({...p,no:p.no||i+1}));
-d.buildings=d.buildings.map(b=>({...b,pokes:Array.isArray(b.pokes)?b.pokes:(b.poke?String(b.poke).split(/[、,，\\n]/).map(x=>x.trim()).filter(Boolean):[])}));
 save();
 
 function save(){localStorage.setItem(K,JSON.stringify(d))}
 function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;")}
 function pct(b){return Math.round((b.stage||[0,0,0,0]).reduce((a,x)=>a+(x?1:0),0)/4*100)}
 function cityPct(){return d.buildings.length?Math.round(d.buildings.reduce((s,b)=>s+pct(b),0)/d.buildings.length):0}
-function areaPct(name){let bs=d.buildings.filter(b=>b.area===name);return bs.length?Math.round(bs.reduce((s,b)=>s+pct(b),0)/bs.length):0}
+function areaPct(n){let a=d.buildings.filter(b=>b.area===n);return a.length?Math.round(a.reduce((s,b)=>s+pct(b),0)/a.length):0}
+function completedBuildings(){return d.buildings.filter(b=>pct(b)===100)}
+function housedPokemon(){return d.pokemon.filter(p=>String(p.home||"").trim())}
 
 let page="home", bsort="area", bArea="", bProg="", psort="no", pfilter="";
+
 function render(){
   const labels=["ホーム","エリア","物件","ポケモン","TODO","メモ","マップ"], icons=["⌂","◎","🏠","✦","✓","📝","◉"], pages=["home","areas","buildings","pokemon","todo","memo","map"];
   document.getElementById("nav").innerHTML=pages.map((x,i)=>`<button class="${page==x?"active":""}" onclick="page='${x}';render()">${icons[i]}<br>${labels[i]}</button>`).join("");
@@ -51,30 +73,40 @@ function progress(b){
   return `<div class="progressline"><div class="track"><div class="bar" style="width:${pct(b)}%"></div></div><span class="small">${pct(b)}%</span></div>`;
 }
 function home(){
-  const cp=cityPct(), ns=[...new Set(d.areas)];
-  return `<div class="section">街全体の進捗</div>
+  const cp=cityPct(), ns=[...new Set(d.areas)], done=completedBuildings().length, housed=housedPokemon().length;
+  return `
+  <div class="grid">
+    <div class="card statcard"><div class="stat">${done}</div><div class="statlabel">完成物件</div></div>
+    <div class="card statcard"><div class="stat">${housed}</div><div class="statlabel">住むところ決定</div></div>
+    <div class="card statcard"><div class="stat">${d.todos.filter(x=>!x.done).length}</div><div class="statlabel">残りTODO</div></div>
+    <div class="card statcard"><div class="stat">${d.memos.length}</div><div class="statlabel">メモ</div></div>
+  </div>
+
+  <div class="section">街全体の進捗</div>
   <div class="card"><div class="progressline"><div class="track"><div class="bar" style="width:${cp}%"></div></div><b>${cp}%</b></div>
-  <div class="small" style="margin-top:7px">${d.buildings.length}物件</div></div>
+  <div class="small" style="margin-top:7px">完成 ${done} / ${d.buildings.length}物件</div></div>
+
   <div class="section">エリア別進捗</div>
-  <div class="card">${ns.length?ns.map(n=>`<div class="row"><div style="flex:1"><b>${esc(n)}</b><div class="small">${d.buildings.filter(b=>b.area===n).length}物件</div>${areaProgress(n)}</div></div>`).join(""):"エリアがまだありません。"}</div>
-  <div class="grid"><div class="card"><div class="stat">${d.buildings.length}</div><div class="small">物件</div></div><div class="card"><div class="stat">${d.pokemon.length}</div><div class="small">ポケモン</div></div><div class="card"><div class="stat">${d.todos.filter(x=>!x.done).length}</div><div class="small">残りTODO</div></div><div class="card"><div class="stat">${d.memos.length}</div><div class="small">メモ</div></div></div>
+  <div class="card">${ns.length?ns.map(n=>{
+    const bs=d.buildings.filter(b=>b.area===n), finished=bs.filter(b=>pct(b)===100).length;
+    return `<div class="row"><div style="flex:1"><b>${esc(n)}</b><div class="small">完成 ${finished} / ${bs.length}物件</div>${areaProgress(n)}</div></div>`;
+  }).join(""):"エリアがまだありません。"}</div>
+
   <div class="section">アプリとして開く</div>
-  <div class="card">
-    <div class="small">対応したブラウザ・環境では、ホーム画面に追加してアプリのように起動できます。</div>
-    <div style="margin-top:9px"><button onclick="showInstallHelp()">ホーム画面への追加方法</button></div>
-  </div>
+  <div class="card"><div class="small">対応したブラウザ・環境では、ホーム画面に追加してアプリのように起動できます。</div>
+  <div style="margin-top:9px"><button onclick="showInstallHelp()">ホーム画面への追加方法</button></div></div>
+
   <div class="section">データ管理</div>
-  <div class="card">
-    <div class="small">このスマホに保存しているデータをファイルとしてバックアップできます。</div>
-    <div style="margin-top:9px">
-      <button class="primary" onclick="backupData()">⬇ データをバックアップ</button>
-      <button onclick="document.getElementById('restoreFile').click()">⬆ 復元</button>
-      <input id="restoreFile" type="file" accept=".json,application/json" style="display:none" onchange="restoreData(event)">
-    </div>
-  </div>
-  <div class="section">最近の物件</div><div class="card">${d.buildings.slice(-5).reverse().map(b=>`<div class="row"><div style="flex:1"><b>${esc(b.name)}</b><div class="small">${esc((b.pokes||[]).join("、"))||"住民未定"} ・ ${esc(b.area)||"場所未定"}</div>${progress(b)}</div><button onclick="openB('${esc(b.name)}')">編集</button></div>`).join("")||"まだありません。"}</div>`;
+  <div class="card"><div class="small">このスマホに保存しているデータをファイルとしてバックアップできます。</div>
+  <div style="margin-top:9px"><button class="primary" onclick="backupData()">⬇ データをバックアップ</button>
+  <button onclick="document.getElementById('restoreFile').click()">⬆ 復元</button>
+  <input id="restoreFile" type="file" accept=".json,application/json" style="display:none" onchange="restoreData(event)"></div></div>
+
+  <div class="section">最近の物件</div>
+  <div class="card">${d.buildings.slice(-5).reverse().map(b=>`<div class="row"><div style="flex:1"><b>${esc(b.name)}</b><div class="small">${esc((b.pokes||[]).join("、"))||"住民未定"} ・ ${esc(b.area)||"場所未定"}</div>${progress(b)}</div><button onclick="openB('${esc(b.name)}')">編集</button></div>`).join("")||"まだありません。"}</div>`;
 }
 function areaProgress(n){let p=areaPct(n);return `<div class="progressline" style="margin-top:7px"><div class="track"><div class="bar" style="width:${p}%"></div></div><span class="small">${p}%</span></div>`}
+
 function buildings(){
   let a=[...d.buildings];
   if(bArea)a=a.filter(b=>b.area===bArea);
@@ -89,20 +121,28 @@ function buildings(){
   <select onchange="bProg=this.value;render()">${progOpts.map(([v,l])=>`<option value="${v}" ${bProg===v?"selected":""}>${l}</option>`).join("")}</select></div>
   <div class="card">${a.map(b=>`<div class="row"><div style="flex:1"><b>${esc(b.name)}</b><div class="small">${esc((b.pokes||[]).join("、"))||"未定"} ・ ${esc(b.area)||"未定"}</div><div class="small">${esc(b.color)||"色未定"} / ${esc(b.mat)||"材料未定"}</div>${progress(b)}</div><button onclick="openB('${esc(b.name)}')">編集</button></div>`).join("")||"条件に合う物件がありません。"}</div>`;
 }
+
 function areas(){
   const ns=[...new Set(d.areas)];
   return `<div class="section">エリア別進捗</div><button class="primary" onclick="addArea()">＋ エリア追加</button>
-  ${ns.map(n=>{let bs=d.buildings.filter(x=>x.area===n),p=areaPct(n);return `<div class="card"><div class="row" style="border:0;padding:0"><div style="flex:1"><b>${esc(n)}</b><div class="small">${bs.length}物件　/　${p}%</div>${areaProgress(n)}</div><button onclick="renameArea('${esc(n)}')">名前変更</button></div>
-  <div style="margin-top:10px"><button onclick="showAreaBuildings('${esc(n)}')">このエリアの建築を見る</button></div></div>`}).join("")||"<div class=card>エリアがまだありません。</div>"}`;
+  ${ns.map(n=>{
+    let bs=d.buildings.filter(x=>x.area===n),p=areaPct(n),finished=bs.filter(b=>pct(b)===100).length;
+    return `<div class="card"><div class="row" style="border:0;padding:0"><div style="flex:1"><b>${esc(n)}</b><div class="small">完成 ${finished} / ${bs.length}物件</div>${areaProgress(n)}</div><button onclick="renameArea('${esc(n)}')">名前変更</button></div>
+    <div style="margin-top:10px"><button onclick="showAreaBuildings('${esc(n)}')">このエリアの建築を見る</button></div></div>`;
+  }).join("")||"<div class=card>エリアがまだありません。</div>"}`;
 }
+
 function showAreaBuildings(n){
   const bs=d.buildings.filter(b=>b.area===n);
-  document.getElementById("sheet").innerHTML=`<h2>${esc(n)}</h2><div class="small">${bs.length}物件</div><div class="card">${bs.map(b=>`<div class="row"><div style="flex:1"><b>${esc(b.name)}</b><div class="small">${esc((b.pokes||[]).join("、"))||"住民未定"}</div>${progress(b)}</div><button onclick="openB('${esc(b.name)}')">詳細</button></div>`).join("")||"このエリアにはまだ建築がありません。"}</div><button onclick="closeM()">閉じる</button>`;
+  document.getElementById("sheet").innerHTML=`<h2>${esc(n)}</h2><div class="small">完成 ${bs.filter(b=>pct(b)===100).length} / ${bs.length}物件</div>
+  <div class="card">${bs.map(b=>`<div class="row"><div style="flex:1"><b>${esc(b.name)}</b><div class="small">${esc((b.pokes||[]).join("、"))||"住民未定"}</div>${progress(b)}</div><button onclick="openB('${esc(b.name)}')">詳細</button></div>`).join("")||"このエリアにはまだ建築がありません。"}</div><button onclick="closeM()">閉じる</button>`;
   document.getElementById("modal").classList.add("show");
 }
+
 const kana={あ:"あいうえおぁぃぅぇぉ",か:"かきくけこがぎぐげご",さ:"さしすせそざじずぜぞ",た:"たちつてとだぢづでど",な:"なにぬねの",は:"はひふへほばびぶべぼぱぴぷぺぽ",ま:"まみむめも",や:"やゆよゃゅょ",ら:"らりるれろ",わ:"わをん"};
 function hira(s){return String(s||"").trim().replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).toLowerCase()}
 function kg(s){let c=hira(s).charAt(0);return Object.keys(kana).find(k=>kana[k].includes(c))||""}
+
 function pokemon(){
   let a=[...d.pokemon];
   if(psort=="name")a.sort((x,y)=>String(x.name||"").localeCompare(String(y.name||""),"ja"));
@@ -110,11 +150,13 @@ function pokemon(){
   else if(psort=="home")a.sort((x,y)=>String(x.home||"").localeCompare(String(y.home||""),"ja"));
   else a.sort((x,y)=>(x.no||9999)-(y.no||9999));
   if(pfilter)a=a.filter(x=>kg(x.name)===pfilter);
-  return `<div class="section">ポケモン一覧 <span class="small">${a.length}/${d.pokemon.length}</span></div><button class="primary" onclick="openP()">＋ ポケモンを追加</button>
+  return `<div class="section">ポケモン一覧 <span class="small">${a.length}/${d.pokemon.length}</span></div>
+  <button class="primary" onclick="openP()">＋ ポケモンを追加</button>
   <div class="filters">${Object.keys(kana).map(x=>`<button class="${pfilter==x?"active":""}" onclick="pfilter=pfilter==='${x}'?'':'${x}';render()">${x}</button>`).join("")}<button class="${!pfilter?"active":""}" onclick="pfilter='';render()">すべて</button></div>
   <div class="filters">${[["no","図鑑番号"],["name","名前"],["status","登場状況"],["home","住居"]].map(([x,l])=>`<button class="${psort==x?"active":""}" onclick="psort='${x}';render()">${l}</button>`).join("")}</div>
-  <div class="card">${a.map(p=>`<div class="row" style="padding:7px 0"><div style="flex:1"><span class="small">#${String(p.no||"—").padStart(3,"0")}</span> <b style="font-size:13px">${esc(p.name)}</b><div class="small">${esc(p.home)||"住居未定"}</div></div><span class="small">${esc(p.status)||"未設定"}</span><button onclick="openP(${Number(p.no)||0})">編集</button></div>`).join("")||"該当なし"}</div>`;
+  <div class="card">${a.map(p=>`<div class="row" style="padding:7px 0"><div style="flex:1"><span class="small">#${String(p.no||"—").padStart(3,"0")}</span> <b style="font-size:13px">${esc(p.name)}</b><div class="small">${esc(p.home)||"住居未定"}</div></div><span class="small">${esc(p.status)||"未出現"}</span><button onclick="openP(${Number(p.no)||0})">編集</button></div>`).join("")||"該当なし"}</div>`;
 }
+
 function todo(){return `<div class="section">TODO</div><button class="primary" onclick="addTodo()">＋ TODO追加</button><div class="card">${d.todos.map((x,i)=>`<div class="row"><label style="flex:1"><input type=checkbox ${x.done?"checked":""} onchange="d.todos[${i}].done=this.checked;save();render()" style="width:auto">${esc(x.text)}</label><button class="danger" onclick="deleteTodo(${i})">削除</button></div>`).join("")||"まだありません。"}</div>`}
 function memo(){return `<div class="section">メモ</div><button class="primary" onclick="addMemo()">＋ メモ追加</button><div class="card">${d.memos.map((m,i)=>`<div class="row"><div style="flex:1"><b>${esc(m.title)}</b><div class="small">${esc(m.text)}</div></div><button onclick="editMemo(${i})">編集</button><button class="danger" onclick="deleteMemo(${i})">削除</button></div>`).join("")||"まだありません。"}</div>`}
 function map(){return `<div class="section">街マップ</div><div class="card" style="height:380px;text-align:center;padding-top:60px">🏝️<br><b>円形の浮遊都市</b><div class="small"><br>ここに街マップと物件ピンを配置できます。</div></div>`}
@@ -134,17 +176,27 @@ function field(l,id,v){return `<label class=small>${l}</label><input id=${id} va
 function saveB(old){
   let names=bp.value.split(/[、,，\n]/).map(x=>x.trim()).filter(Boolean).slice(0,9);
   let b={name:bn.value||"無題",pokes:names,poke:names.join("、"),color:bc.value,mat:bm.value,area:ba.value,size:bz.value,note:bnote.value,stage:[0,1,2,3].map(i=>document.getElementById("s"+i).checked?1:0)};
-  let i=d.buildings.findIndex(x=>x.name===old);if(i>=0)d.buildings[i]=b;else d.buildings.push(b);
-  if(b.area&&!d.areas.includes(b.area))d.areas.push(b.area);save();closeM();
+  let i=d.buildings.findIndex(x=>x.name===old);
+  if(i>=0)d.buildings[i]=b;else d.buildings.push(b);
+  if(b.area&&!d.areas.includes(b.area))d.areas.push(b.area);
+  save();closeM();render();
+}
+
 function backupData(){
-  const payload={version:"Pocoa V5",savedAt:new Date().toISOString(),data:d};
+  const payload={version:"Pocoa V6",savedAt:new Date().toISOString(),data:d};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob), a=document.createElement("a");
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
   const t=new Date(), pad=n=>String(n).padStart(2,"0");
   a.href=url;
   a.download=`pocoa-backup-${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}.json`;
-  a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  a.style.display="none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
+
 function restoreData(e){
   const f=e.target.files?.[0]; if(!f)return;
   const r=new FileReader();
@@ -156,28 +208,28 @@ function restoreData(e){
       d={buildings:incoming.buildings||[],pokemon:incoming.pokemon||[],todos:incoming.todos||[],areas:incoming.areas||[],memos:incoming.memos||[]};
       d.areas=[...new Set([...d.areas,...d.buildings.map(x=>x.area).filter(Boolean)])];
       d.buildings=d.buildings.map(b=>({...b,pokes:Array.isArray(b.pokes)?b.pokes:(b.poke?String(b.poke).split(/[、,，\n]/).map(x=>x.trim()).filter(Boolean):[])}));
-      save(); 
-function showInstallHelp(){
-  alert("Chromeの場合：右上の「︙」→「ホーム画面に追加」または「アプリをインストール」を選んでください。\n※PWAとして公開されたURLで開いた場合に利用できます。");
-}
-if("serviceWorker" in navigator && location.protocol!=="file:"){
-  navigator.serviceWorker.register("./sw.js").catch(()=>{});
-}
-
-render(); alert("バックアップから復元しました。");
+      d.pokemon=d.pokemon.map((p,i)=>({...p,no:p.no||i+1,status:normalizeStatus(p.status,p.home)}));
+      save(); render(); alert("バックアップから復元しました。");
     }catch(err){alert("バックアップファイルを読み込めませんでした。");}
     e.target.value="";
   };
   r.readAsText(f);
 }
-render();
+
+function showInstallHelp(){
+  alert("Chromeの場合：右上の「︙」→「ホーム画面に追加」または「アプリをインストール」を選んでください。\n※PWAとして公開されたURLで開いた場合に利用できます。");
 }
+
 function deleteBuilding(name){if(confirm("この物件を削除しますか？")){d.buildings=d.buildings.filter(b=>b.name!==name);save();closeM();render()}}
 function openP(no=null){
   let i=no===null?-1:d.pokemon.findIndex(p=>Number(p.no)===Number(no));
-  let p=i>=0?d.pokemon[i]:{name:"",no:nextDexNo(),status:"",home:""};
+  let p=i>=0?d.pokemon[i]:{name:"",no:nextDexNo(),status:"未出現",home:""};
   document.getElementById("sheet").innerHTML=`<h2>${i>=0?"ポケモン情報を編集":"ポケモンを追加"}</h2>
-  ${field("名前","pn",p.name)}${field("図鑑番号","pno",p.no)}${field("登場状況","ps",p.status||"")}${field("住居","ph",p.home||"")}
+  ${field("名前","pn",p.name)}${field("図鑑番号","pno",p.no)}
+  <label class=small>登場状況</label><select id="ps">
+    ${["未出現","仮住まい","入居"].map(x=>`<option value="${x}" ${p.status===x?"selected":""}>${x}</option>`).join("")}
+  </select>
+  ${field("住居","ph",p.home||"")}
   <button class=primary onclick="saveP(${i})">保存</button> <button onclick="closeM()">キャンセル</button>
   ${i>=0?` <button class="danger" onclick="deleteP(${i})">削除</button>`:""}`;
   document.getElementById("modal").classList.add("show");
@@ -187,16 +239,12 @@ function nextDexNo(){
   return nums.length?Math.max(...nums)+1:1;
 }
 function saveP(i){
-  const item={name:pn.value.trim()||"無名ポケモン",no:Number(pno.value)||nextDexNo(),status:ps.value.trim(),home:ph.value.trim()};
+  const item={name:pn.value.trim()||"無名ポケモン",no:Number(pno.value)||nextDexNo(),status:ps.value,home:ph.value.trim()};
   if(i>=0)d.pokemon[i]={...d.pokemon[i],...item}; else d.pokemon.push(item);
   d.pokemon.sort((a,b)=>(Number(a.no)||99999)-(Number(b.no)||99999));
   save();closeM();render();
 }
-function deleteP(i){
-  if(confirm("このポケモンを削除しますか？")){
-    d.pokemon.splice(i,1); save(); closeM(); render();
-  }
-}
+function deleteP(i){if(confirm("このポケモンを削除しますか？")){d.pokemon.splice(i,1);save();closeM();render()}}
 function addArea(){let x=prompt("エリア名");if(x&&x.trim()&&!d.areas.includes(x.trim())){d.areas.push(x.trim());save();render()}}
 function renameArea(o){let n=prompt("エリア名を変更",o);if(!n||n.trim()===o)return;n=n.trim();if(d.areas.includes(n)){alert("そのエリア名はすでにあります。");return}d.areas=d.areas.map(x=>x===o?n:x);d.buildings.forEach(b=>{if(b.area===o)b.area=n});save();render()}
 function addTodo(){let x=prompt("TODO");if(x){d.todos.push({text:x,done:false});save();render()}}
@@ -205,5 +253,9 @@ function addMemo(){let t=prompt("タイトル");if(t===null)return;let x=prompt(
 function editMemo(i){let t=prompt("タイトル",d.memos[i].title);if(t===null)return;let x=prompt("内容",d.memos[i].text);if(x!==null){d.memos[i]={title:t,text:x};save();render()}}
 function deleteMemo(i){if(confirm("このメモを削除しますか？")){d.memos.splice(i,1);save();render()}}
 function closeM(){document.getElementById("modal").classList.remove("show")}
+
+if("serviceWorker" in navigator && location.protocol!=="file:"){navigator.serviceWorker.register("./sw.js").catch(()=>{});}
 render();
-</script></body></html>
+</script>
+</body>
+</html>
